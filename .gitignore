@@ -26,3 +26,5 @@ mono_crash.mem.947758.1.blob
 
 Assets/SkySeries Freebie
 Assets/SPH.cs
+*.meta
+*.asset
