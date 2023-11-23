@@ -5240,13 +5240,13 @@ MonoBehaviour:
   particleSize: 0.1
   particleMass: 1
   partialCount: 1000
-  smoothingRadius: 1
+  smoothingRadius: 10
   restDensity: 1
   stiffness: 2
-  viscosity: 0.01
+  viscosity: -0.01
   gravity: {x: 0, y: 0, z: 0}
   surfaceTension: 0.001
-  timeStep: 0.5
+  timeStep: 0.01
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

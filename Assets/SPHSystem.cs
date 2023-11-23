@@ -4,18 +4,32 @@ using UnityEngine;
 
 public class SPHSystem : MonoBehaviour
 {
+    [Header("General")]
     public float particleRange = 1.0f;
     public float coreRange = 0.8f;
     public float particleSize = 0.05f;
     public float particleMass = 1f;
     public int partialCount = 1000;
+    [Header("Fluid Constants")]
+    [Range(0.001f, 10f)]
     public float smoothingRadius = 1f;
     public float restDensity = 1f;
+    [Range(0.1f, 20f)]
     public float stiffness = 2f;
-    public float viscosity = -0.003f;
-    public Vector3 gravity = new Vector3(0f,0f,0f);
-    public float surfaceTension = 0.001f;
+    [Range(0.001f, 10f)]
+    public float viscosity = 0.01f;
+    [Range(0.001f, 10f)]
+    public float surfaceTension = 0.01f;    
+    [Range(0.001f, 10f)]
     public float timeStep = 0.2f;
+    [Header("Repulsion Force")]
+    [Range(0.001f, 2f)]
+    public float repulsionDistance = 0.01f;
+
+    [Range(0f, 5f)]
+    public float repulsion = 0.01f;
+    [Header("External Force")]
+    public Vector3 gravity = new Vector3(0f,0f,0f);
     private float boundaryDamp = 0.7f;
     private List<Particle> particles = new List<Particle>();
     private List<GameObject> particleObjects = new List<GameObject>();
@@ -83,6 +97,7 @@ public class SPHSystem : MonoBehaviour
             Vector3 surfaceNormal = Vector3.zero;
             float colorLaplacian = 0.0f;
 
+            Vector3 repulsionForce = Vector3.zero;
             foreach (var neighbor in particles)
             {
                 if (neighbor != particle)
@@ -92,12 +107,18 @@ public class SPHSystem : MonoBehaviour
                     viscosityForce += viscosity * particleMass * (neighbor.velocity - particle.velocity) / neighbor.density * Kernel.WviscosityLaplacian(r);
                     surfaceNormal += particleMass * Kernel.Wpoly6Gradient(r) / neighbor.density;
                     colorLaplacian += particleMass * Kernel.Wpoly6Laplacian(r) / neighbor.density;
+                
+                    if (r.magnitude < particleSize * repulsionDistance)
+                    {
+                        float repulsionStrength = 1.0f - r.magnitude / (particleSize * repulsionDistance);
+                        repulsionForce += repulsionStrength * r.normalized;
+                    }
                 }
             }
+            repulsionForce = repulsionForce.normalized * repulsion;
 
             Vector3 gravityForce = gravity * particle.density;
-            Vector3 centerForce = -1f*particle.position.normalized;
-            centerForce = Vector3.zero;
+            Vector3 centerForce = -0.5f*particle.position.normalized;
 
             if(surfaceNormal.magnitude>0.01f) surfaceNormal = surfaceNormal.normalized;
             Vector3 surfaceTensionForce = -surfaceTension * colorLaplacian * surfaceNormal;
@@ -107,7 +128,17 @@ public class SPHSystem : MonoBehaviour
                 viscosityForce + 
                 gravityForce + 
                 surfaceTensionForce +
-                centerForce;
+                centerForce + 
+                repulsionForce;
+
+            // if(float.IsNaN(particle.force.x)){
+            //     Debug.Log("Debug");
+            //     Debug.Log(pressureForce);
+            //     Debug.Log(viscosityForce);
+            //     Debug.Log(gravityForce);
+            //     Debug.Log(surfaceTensionForce);
+            //     Debug.Log(centerForce);
+            // }
         }
     }
 
@@ -118,7 +149,7 @@ public class SPHSystem : MonoBehaviour
             Particle particle = particles[i];
             particle.velocity += timeStep * particle.force / particleMass;
             particle.position += timeStep * particle.velocity;
-            BoxConstrain(ref particle);
+            CoreConstrain(ref particle);
             particles[i] = particle;
         }
     }
@@ -132,9 +163,22 @@ public class SPHSystem : MonoBehaviour
 
     private void CoreConstrain(ref Particle particle)
     {
+        float speed = particle.velocity.magnitude;
+        float range = 0.005f * speed;
+        float jit_x = Random.Range(-range, range);
+        float jit_y = Random.Range(-range, range);
+        float jit_z = Random.Range(-range, range);
         if(particle.position.magnitude < coreRange){
+            particle.velocity += new Vector3(jit_x, jit_y, jit_z);
+            particle.velocity = particle.velocity.normalized * speed;
             particle.velocity *= -boundaryDamp;
             particle.position = particle.position.normalized * coreRange;
+        }
+        else if(particle.position.magnitude > coreRange + particleRange){
+            particle.velocity += new Vector3(jit_x, jit_y, jit_z);
+            particle.velocity = particle.velocity.normalized * speed;
+            particle.velocity *= -boundaryDamp;
+            particle.position = particle.position.normalized * (coreRange + particleRange);
         }
     }
 
@@ -145,28 +189,34 @@ public class SPHSystem : MonoBehaviour
         if(particle.position.x < -edge){
             particle.velocity.x *= -boundaryDamp;
             particle.position.x = -edge;
+            particle.force.x = 0f;
         }
         else if(particle.position.x > edge){
             particle.velocity.x *= -boundaryDamp;
             particle.position.x = edge;
+            particle.force.x = 0f;
         }
 
         if(particle.position.y < -edge){
             particle.velocity.y *= -boundaryDamp;
             particle.position.y = -edge;
+            particle.force.y = 0f;
         }
         else if(particle.position.y > edge){
             particle.velocity.y *= -boundaryDamp;
             particle.position.y = edge;
+            particle.force.y = 0f;
         }
 
         if(particle.position.z < -edge){
             particle.velocity.z *= -boundaryDamp;
             particle.position.z = -edge;
+            particle.force.z = 0f;
         }
         else if(particle.position.z > edge){
             particle.velocity.z *= -boundaryDamp;
             particle.position.z = edge;
+            particle.force.z = 0f;
         }
 
     }
