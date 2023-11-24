@@ -3,12 +3,12 @@ using UnityEngine;
 public static class Kernel
 {
     // refer to http://www.cs.cornell.edu/%7Ebindel/class/cs5220-f11/code/sph-derive.pdf
-    private static float h, h2, h3, h4, h5, h6, h8, h9;
-    private static float poly6Coefficient;
-    private static float poly6GradientCoefficient;
-    private static float poly6LaplacianCoefficient;
-    private static float spikyGradientCoefficient;
-    private static float viscosityLaplacianCoefficient;
+    public static float h, h2, h3, h4, h5, h6, h8, h9;
+    public static float poly6Coefficient;
+    public static float poly6GradientCoefficient;
+    public static float poly6LaplacianCoefficient;
+    public static float spikyGradientCoefficient;
+    public static float viscosityLaplacianCoefficient;
 
     public static void Initialize(float smoothingRadius)
     {
@@ -26,7 +26,6 @@ public static class Kernel
         poly6LaplacianCoefficient = -48f / (Mathf.PI * h8);
         spikyGradientCoefficient = -30f / (Mathf.PI * h4);
         viscosityLaplacianCoefficient = 40f / (Mathf.PI * h4);
-        
     }
 
     public static float Wpoly6(Vector3 r)

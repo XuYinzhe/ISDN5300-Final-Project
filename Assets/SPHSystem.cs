@@ -27,7 +27,7 @@ public class SPHSystem : MonoBehaviour
     public float repulsionDistance = 0.01f;
 
     [Range(0f, 5f)]
-    public float repulsion = 0.01f;
+    public float repulsion = 0f;
     [Header("External Force")]
     public Vector3 gravity = new Vector3(0f,0f,0f);
     private float boundaryDamp = 0.7f;

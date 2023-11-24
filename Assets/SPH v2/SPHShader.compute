@@ -1,0 +1,162 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CalculateDensityPressure
+#pragma kernel CalculateForces
+#pragma kernel Integrate
+
+struct Particle
+{
+    float pressure;
+    float density;
+    float3 force;
+    float3 velocity;
+    float3 position;
+};
+
+RWStructuredBuffer<Particle> particles;
+
+int partialCount;
+float particleMass;
+float particleRange;
+float coreRange;
+
+float PI;
+float h;
+float h2;
+float poly6Coefficient;
+float poly6GradientCoefficient;
+float poly6LaplacianCoefficient;
+float spikyGradientCoefficient;
+float viscosityLaplacianCoefficient;
+
+float restDensity;
+float stiffness;
+float viscosity;
+float surfaceTension;
+
+float timeStep = 0.001;
+
+float Wpoly6(float3 r)
+{
+    float r2 = dot(r,r);
+    if (r2 < h2)
+    {
+        float term = h2 - r2;
+        return poly6Coefficient * term * term *term;
+    }
+    return 0;
+}
+
+float3 Wpoly6Gradient(float3 r)
+{
+    float r2 = dot(r,r);
+    if (r2 < h2)
+    {
+        float term = h2 - r2;
+        return poly6GradientCoefficient * term * term * r;
+    }
+    return float3(0,0,0);
+}
+
+float Wpoly6Laplacian(float3 r)
+{
+    float r2 = dot(r,r);
+    if (r2 < h2)
+    {
+        float term = h2 - r2;
+        return poly6LaplacianCoefficient * term * (h2-3*r2);
+    }
+    return 0;
+}
+
+float3 WspikyGradient(float3 r)
+{
+    float rMagnitude = length(r);
+    float q = rMagnitude / h;
+    if(rMagnitude < h)
+    {
+        float term = h - rMagnitude;
+        return spikyGradientCoefficient * (1-q) * (1-q) / q * r;
+    }
+    return float3(0,0,0);
+}
+
+float WviscosityLaplacian(float3 r)
+{
+    float rMagnitude = length(r);
+    float q = rMagnitude / h;
+    if(rMagnitude < h)
+    {
+        return viscosityLaplacianCoefficient * (1-q);
+    }
+    return 0;
+}
+
+
+[numthreads(100,1,1)]
+void CalculateDensityPressure (uint3 id: SV_DISPATCHTHREADID){
+    float sum = 0;
+
+    for(int i=0; i<partialCount; i++){
+        if(i == id.x) continue;
+        float3 r = particles[id.x].position - particles[i].position;
+        sum += Wpoly6(r);
+    }
+
+    particles[id.x].density = sum * particleMass;
+    if(particles[id.x].density<0.000001) particles[id.x].density = 0.000001;
+
+    particles[id.x].pressure = stiffness * (particles[id.x].density - restDensity);
+    if(particles[id.x].pressure < 0) particles[id.x].pressure = 0;
+}
+
+[numthreads(100,1,1)]
+void CalculateForces (uint3 id: SV_DISPATCHTHREADID){
+    float3 pressureForce = float3(0,0,0);
+    float3 viscosityForce = float3(0,0,0);
+    float3 surfaceNormal = float3(0,0,0);
+    float colorLaplacian = 0;
+
+    float idx_density2 = particles[id.x].density * particles[id.x].density;
+
+    for(int i=0; i<partialCount; i++){
+        if(i == id.x) continue;
+        float3 r = particles[id.x].position - particles[i].position;
+        float i_density2 = particles[i].density * particles[i].density;
+        pressureForce -= particleMass * (particles[id.x].pressure/idx_density2 + particles[i].pressure/i_density2) * WspikyGradient(r);
+        viscosityForce += viscosity * particleMass * (particles[i].velocity - particles[id.x].velocity) / particles[i].density * WviscosityLaplacian(r);
+        surfaceNormal += particleMass * Wpoly6Gradient(r) / particles[i].density;
+        colorLaplacian += particleMass * Wpoly6Laplacian(r) / particles[i].density;
+    }
+    if(length(surfaceNormal)>0.01) surfaceNormal = normalize(surfaceNormal);
+    float3 surfaceTensionForce = -surfaceTension * colorLaplacian * surfaceNormal;
+
+    float3 centerForce = -0.5 * normalize(particles[id.x].position);
+
+    particles[id.x].force = 
+                pressureForce + 
+                viscosityForce + 
+                surfaceTensionForce +
+                centerForce;
+}
+
+[numthreads(100,1,1)]
+void Integrate (uint3 id: SV_DISPATCHTHREADID){
+    float bound = 0.5;
+    float3 v = particles[id.x].velocity + (particles[id.x].force/particleMass) * timeStep;
+    particles[id.x].position += v * timeStep;
+
+    if(length(particles[id.x].position)-h < coreRange){
+        float3 n = -normalize(particles[id.x].position);
+        float3 v_n = -dot(n,v) * n;
+        float3 v2 = v + (1 + bound) * v_n;
+        particles[id.x].position = coreRange + h;
+    }
+    else if(length(particles[id.x].position)+h > coreRange + particleRange){
+        float3 n = normalize(particles[id.x].position);
+        float3 v_n = -dot(n,v) * n;
+        float3 v2 = v + (1 + bound) * v_n;
+        particles[id.x].position = coreRange + particleRange - h;
+    }
+    particles[id.x].velocity = v;
+}
+
